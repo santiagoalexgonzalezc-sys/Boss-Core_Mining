@@ -2,48 +2,57 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Boss Core Minigame + Shop</title>
+<title>Boss Core Minigame</title>
 
 <style>
     body {
         margin: 0;
-        background: #111;
+        background: radial-gradient(circle at center, #1a1a1a, #000);
         display: flex;
         justify-content: center;
         align-items: center;
         height: 100vh;
         font-family: Arial;
         color: white;
+        overflow: hidden;
     }
 
     canvas {
         border: 2px solid #333;
         background: #000;
+        box-shadow: 0 0 30px rgba(255,255,255,0.1);
     }
 
     button {
         position: absolute;
         padding: 10px 15px;
-        margin: 5px;
         cursor: pointer;
         border: none;
-        border-radius: 6px;
-        background: #333;
+        border-radius: 8px;
+        background: linear-gradient(145deg, #2b2b2b, #1a1a1a);
         color: white;
+        transition: all 0.15s ease;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
     }
 
     button:hover {
-        background: #555;
+        transform: scale(1.05);
+        background: linear-gradient(145deg, #3a3a3a, #222);
+    }
+
+    button:active {
+        transform: scale(0.95);
     }
 
     #shopBtn { top: 20px; left: 20px; }
     #fsBtn { top: 20px; left: 100px; }
 </style>
 </head>
+
 <body>
 
-<button id="shopBtn">Shop</button>
-<button id="fsBtn">Fullscreen</button>
+<button id="shopBtn">🏪 Shop</button>
+<button id="fsBtn">⛶ Fullscreen</button>
 
 <canvas id="game" width="800" height="600"></canvas>
 
@@ -96,7 +105,8 @@ class BossCoreMinigame {
                 x: this.coreX + (Math.random() * 200 - 100),
                 y: this.coreY + (Math.random() * 200 - 100),
                 radius: 15,
-                active: true
+                active: true,
+                pulse: Math.random() * 10
             });
         }
     }
@@ -108,7 +118,7 @@ class BossCoreMinigame {
         this.clickCooldown = Math.max(0, this.clickCooldown - dt);
 
         for (const p of this.damagePopups) {
-            p.y -= 0.3 * dt;
+            p.y -= 0.25 * dt;
             p.life -= dt;
         }
         this.damagePopups = this.damagePopups.filter(p => p.life > 0);
@@ -118,7 +128,7 @@ class BossCoreMinigame {
             return;
         }
 
-        if (Math.random() < 0.01) {
+        if (Math.random() < 0.015) {
             this.spawnWeakPoints();
         }
     }
@@ -126,7 +136,7 @@ class BossCoreMinigame {
     click(x, y) {
         if (!this.active || this.clickCooldown > 0) return;
 
-        this.clickCooldown = 120;
+        this.clickCooldown = 110;
 
         const layer = this.layers[this.currentLayer];
         if (!layer) return;
@@ -155,15 +165,15 @@ class BossCoreMinigame {
             x,
             y,
             text: "-" + Math.floor(damage),
-            life: 600
+            life: 700
         });
 
         if (hitWeak) {
             this.damagePopups.push({
                 x,
                 y: y - 20,
-                text: "WEAK HIT!",
-                life: 500
+                text: "CRITICAL!",
+                life: 600
             });
         }
 
@@ -199,52 +209,62 @@ class BossCoreMinigame {
     render(ctx) {
         if (!this.active) return;
 
+        // 🌑 background glow
         ctx.fillStyle = "#050505";
         ctx.fillRect(0, 0, 800, 600);
 
         const layer = this.layers[this.currentLayer];
         const radius = 90 - this.currentLayer * 12;
 
-        // core
+        // 🔴 core glow
+        ctx.shadowColor = "#ff3b3b";
+        ctx.shadowBlur = 25;
+
         ctx.fillStyle = "#e74c3c";
         ctx.beginPath();
         ctx.arc(this.coreX, this.coreY, radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // weak points
+        ctx.shadowBlur = 0;
+
+        // 🟢 weak points (animated pulse)
         for (const wp of this.weakPoints) {
             if (!wp.active) continue;
 
+            wp.pulse += 0.1;
+
+            const pulseSize = wp.radius + Math.sin(wp.pulse) * 2;
+
             ctx.fillStyle = "#2ecc71";
             ctx.beginPath();
-            ctx.arc(wp.x, wp.y, wp.radius, 0, Math.PI * 2);
+            ctx.arc(wp.x, wp.y, pulseSize, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // HP BAR
+        // 📊 HP BAR
         const barW = 300;
         const hpPct = layer.hp / layer.maxHp;
 
-        ctx.fillStyle = "#333";
-        ctx.fillRect(this.coreX - barW/2, this.coreY - radius - 40, barW, 18);
+        ctx.fillStyle = "#222";
+        ctx.fillRect(this.coreX - barW/2, this.coreY - radius - 45, barW, 18);
 
         ctx.fillStyle = "#ff4d4d";
-        ctx.fillRect(this.coreX - barW/2, this.coreY - radius - 40, barW * hpPct, 18);
+        ctx.fillRect(this.coreX - barW/2, this.coreY - radius - 45, barW * hpPct, 18);
 
-        ctx.strokeStyle = "white";
-        ctx.strokeRect(this.coreX - barW/2, this.coreY - radius - 40, barW, 18);
+        ctx.strokeStyle = "#fff";
+        ctx.strokeRect(this.coreX - barW/2, this.coreY - radius - 45, barW, 18);
 
-        // UI
+        // 🧠 UI
         ctx.fillStyle = "white";
         ctx.font = "16px Arial";
-
         ctx.fillText("Layer: " + layer.name, 20, 30);
         ctx.fillText("HP: " + Math.floor(layer.hp), 20, 60);
         ctx.fillText("Money: $" + this.player.money, 20, 90);
 
-        // damage numbers
+        // 💥 damage popups
         for (const p of this.damagePopups) {
-            ctx.fillStyle = p.text === "WEAK HIT!" ? "#2ecc71" : "#fff";
+            ctx.fillStyle = p.text === "CRITICAL!" ? "#2ecc71" : "#fff";
+            ctx.font = "14px Arial";
             ctx.fillText(p.text, p.x, p.y);
         }
     }
@@ -269,25 +289,18 @@ const player = {
 
 const bossCore = new BossCoreMinigame(player);
 
-let state = "menu"; // menu | shop | game
-let lastTime = 0;
+let state = "menu";
 
-// ---------------- SHOP ----------------
+// ---------------- SHOP UI ----------------
 
-function openShop() {
-    state = "shop";
-}
-
-function closeShop() {
-    state = "menu";
-}
+const shopUI = {
+    hover: null,
+    clickAnim: 0
+};
 
 // buttons
-document.getElementById("shopBtn").onclick = openShop;
-
-document.getElementById("fsBtn").onclick = () => {
-    document.documentElement.requestFullscreen();
-};
+document.getElementById("shopBtn").onclick = () => state = "shop";
+document.getElementById("fsBtn").onclick = () => document.documentElement.requestFullscreen();
 
 // ---------------- INPUT ----------------
 
@@ -298,7 +311,7 @@ window.addEventListener("keydown", (e) => {
     }
 
     if (state === "shop" && e.key === "Escape") {
-        closeShop();
+        state = "menu";
     }
 });
 
@@ -312,14 +325,15 @@ canvas.addEventListener("click", (e) => {
     }
 
     if (state === "shop") {
-        // upgrade buttons inside canvas
-        if (x > 250 && x < 550) {
-            if (y > 200 && y < 260 && player.money >= 100) {
+        if (x > 200 && x < 600) {
+            // normal dmg upgrade
+            if (y > 220 && y < 290 && player.money >= 100) {
                 player.money -= 100;
                 player.upgrades.normalDmg += 2;
             }
 
-            if (y > 300 && y < 360 && player.money >= 150) {
+            // weak dmg upgrade
+            if (y > 330 && y < 400 && player.money >= 150) {
                 player.money -= 150;
                 player.upgrades.weakDmg += 5;
             }
@@ -330,51 +344,68 @@ canvas.addEventListener("click", (e) => {
 // ---------------- LOOP ----------------
 
 function loop(t) {
-    const dt = t - lastTime;
-    lastTime = t;
-
     ctx.clearRect(0, 0, 800, 600);
 
     if (state === "game") {
-        bossCore.update(dt);
+        bossCore.update(16);
         bossCore.render(ctx);
 
-        ctx.fillStyle = "#fff";
-        ctx.fillText("Press Shop button anytime", 550, 30);
+        ctx.fillStyle = "white";
+        ctx.font = "14px Arial";
+        ctx.fillText("🏪 Shop button available", 600, 30);
     }
 
     if (state === "menu") {
         ctx.fillStyle = "white";
-        ctx.font = "24px Arial";
-        ctx.fillText("⛏️ BOSS CORE MINIGAME", 250, 200);
+        ctx.font = "26px Arial";
+        ctx.fillText("⛏️ BOSS CORE MINIGAME", 240, 200);
+        ctx.font = "18px Arial";
         ctx.fillText("Press B to Start", 300, 260);
         ctx.fillText("Money: $" + player.money, 320, 320);
-        ctx.fillText("Open Shop with button ↑", 270, 360);
+        ctx.fillText("Use Shop button to upgrade", 270, 360);
     }
 
     if (state === "shop") {
-        ctx.fillStyle = "#111";
+        // background
+        ctx.fillStyle = "#0b0b0b";
         ctx.fillRect(0, 0, 800, 600);
 
-        ctx.fillStyle = "white";
-        ctx.font = "24px Arial";
+        ctx.fillStyle = "#fff";
+        ctx.font = "28px Arial";
         ctx.fillText("🏪 SHOP", 350, 80);
 
         ctx.font = "18px Arial";
+        ctx.fillText("Money: $" + player.money, 330, 120);
 
-        ctx.fillText("Upgrade Normal Damage (+2) - $100", 200, 230);
-        ctx.fillText("Upgrade Weak Point Damage (+5) - $150", 200, 330);
+        // cards
+        drawCard(200, 200, "⚔️ Normal Damage", "+2 Damage", "$100");
+        drawCard(200, 300, "💥 Weak Point Damage", "+5 Damage", "$150");
 
-        ctx.fillText("Click the text to buy", 300, 420);
-        ctx.fillText("Press ESC to go back", 300, 460);
-
-        // draw clickable zones
-        ctx.strokeStyle = "#555";
-        ctx.strokeRect(250, 200, 300, 60);
-        ctx.strokeRect(250, 300, 300, 60);
+        ctx.fillStyle = "#777";
+        ctx.font = "14px Arial";
+        ctx.fillText("Click cards to upgrade", 310, 450);
+        ctx.fillText("ESC to go back", 330, 480);
     }
 
     requestAnimationFrame(loop);
+}
+
+function drawCard(x, y, title, desc, cost) {
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(x, y, 400, 60);
+
+    ctx.strokeStyle = "#333";
+    ctx.strokeRect(x, y, 400, 60);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px Arial";
+    ctx.fillText(title, x + 10, y + 25);
+
+    ctx.fillStyle = "#aaa";
+    ctx.fillText(desc, x + 10, y + 45);
+
+    ctx.fillStyle = "#4ade80";
+    ctx.fillText(cost, x + 320, y + 35);
 }
 
 requestAnimationFrame(loop);
