@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Boss Core Minigame</title>
+<style>
+    body {
+        margin: 0;
+        background: #111;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        font-family: Arial;
+        color: white;
+    }
+
+    canvas {
+        border: 2px solid #333;
+        background: #000;
+    }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="800" height="600"></canvas>
+
+<script>
+class BossCoreMinigame {
+    constructor(player) {
+        this.player = player;
+
+        this.active = false;
+
+        this.layers = [];
+        this.currentLayer = 0;
+
+        this.time = 0;
+        this.duration = 30000;
+
+        this.weakPoints = [];
+
+        this.coreX = 400;
+        this.coreY = 320;
+
+        this.clickCooldown = 0;
+
+        // 💥 floating damage text
+        this.damagePopups = [];
+    }
+
+    start() {
+        this.active = true;
+        this.time = 0;
+        this.currentLayer = 0;
+        this.damagePopups = [];
+
+        this.layers = [
+            { name: "Armor Shell", hp: 100, maxHp: 100, resistance: 1.5 },
+            { name: "Reinforced Shell", hp: 150, maxHp: 150, resistance: 1.2 },
+            { name: "Energy Core", hp: 200, maxHp: 200, resistance: 1.0 },
+            { name: "Final Core", hp: 300, maxHp: 300, resistance: 0.8 }
+        ];
+
+        this.spawnWeakPoints();
+    }
+
+    spawnWeakPoints() {
+        this.weakPoints = [];
+
+        const count = 3 + Math.floor(Math.random() * 3);
+
+        for (let i = 0; i < count; i++) {
+            this.weakPoints.push({
+                x: this.coreX + (Math.random() * 200 - 100),
+                y: this.coreY + (Math.random() * 200 - 100),
+                radius: 15,
+                active: true
+            });
+        }
+    }
+
+    update(dt) {
+        if (!this.active) return;
+
+        this.time += dt;
+        this.clickCooldown = Math.max(0, this.clickCooldown - dt);
+
+        // update floating damage text
+        for (const p of this.damagePopups) {
+            p.y -= 0.3 * dt;
+            p.life -= dt;
+        }
+        this.damagePopups = this.damagePopups.filter(p => p.life > 0);
+
+        if (this.time >= this.duration) {
+            this.fail();
+            return;
+        }
+
+        if (Math.random() < 0.01) {
+            this.spawnWeakPoints();
+        }
+    }
+
+    click(x, y) {
+        if (!this.active || this.clickCooldown > 0) return;
+
+        this.clickCooldown = 120;
+
+        const layer = this.layers[this.currentLayer];
+        if (!layer) return;
+
+        let damage = 10 / layer.resistance;
+        let hitWeak = false;
+
+        for (const wp of this.weakPoints) {
+            if (!wp.active) continue;
+
+            const dx = x - wp.x;
+            const dy = y - wp.y;
+
+            if (Math.sqrt(dx * dx + dy * dy) < wp.radius) {
+                damage = 25 / layer.resistance;
+                wp.active = false;
+                hitWeak = true;
+                break;
+            }
+        }
+
+        layer.hp -= damage;
+        layer.hp = Math.max(0, layer.hp);
+
+        // 💥 show damage popup
+        this.damagePopups.push({
+            x,
+            y,
+            text: "-" + Math.floor(damage),
+            life: 600
+        });
+
+        if (hitWeak) {
+            this.damagePopups.push({
+                x,
+                y: y - 20,
+                text: "WEAK HIT!",
+                life: 500
+            });
+        }
+
+        if (layer.hp <= 0) {
+            this.currentLayer++;
+
+            if (this.currentLayer >= this.layers.length) {
+                this.finish();
+            } else {
+                this.spawnWeakPoints();
+            }
+        }
+    }
+
+    finish() {
+        this.active = false;
+
+        const reward =
+            500 +
+            this.layers.length * 250 +
+            Math.floor(Math.random() * 250);
+
+        this.player.money += reward;
+
+        alert("💥 CORE DESTROYED! +$" + reward);
+    }
+
+    fail() {
+        this.active = false;
+        alert("⚠️ Core regenerated...");
+    }
+
+    render(ctx) {
+        if (!this.active) return;
+
+        ctx.fillStyle = "#050505";
+        ctx.fillRect(0, 0, 800, 600);
+
+        const layer = this.layers[this.currentLayer];
+        if (!layer) return;
+
+        const radius = 90 - this.currentLayer * 12;
+
+        // 🔴 CORE
+        ctx.fillStyle = "#e74c3c";
+        ctx.beginPath();
+        ctx.arc(this.coreX, this.coreY, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 🟢 weak points
+        for (const wp of this.weakPoints) {
+            if (!wp.active) continue;
+
+            ctx.fillStyle = "#2ecc71";
+            ctx.beginPath();
+            ctx.arc(wp.x, wp.y, wp.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 📊 HP BAR ABOVE BOSS
+        const barWidth = 300;
+        const barHeight = 18;
+
+        const hpPercent = layer.hp / layer.maxHp;
+
+        ctx.fillStyle = "#333";
+        ctx.fillRect(this.coreX - barWidth / 2, this.coreY - radius - 40, barWidth, barHeight);
+
+        ctx.fillStyle = "#ff4d4d";
+        ctx.fillRect(this.coreX - barWidth / 2, this.coreY - radius - 40, barWidth * hpPercent, barHeight);
+
+        ctx.strokeStyle = "#fff";
+        ctx.strokeRect(this.coreX - barWidth / 2, this.coreY - radius - 40, barWidth, barHeight);
+
+        // 🧠 UI TEXT
+        ctx.fillStyle = "white";
+        ctx.font = "16px Arial";
+
+        ctx.fillText("Layer: " + layer.name, 20, 30);
+        ctx.fillText("HP: " + Math.floor(layer.hp) + " / " + layer.maxHp, 20, 60);
+        ctx.fillText("Time: " + Math.floor(this.time / 1000) + "s", 20, 90);
+
+        ctx.fillText("Click GREEN weak points for bonus damage!", 20, 120);
+
+        // 💥 damage popups
+        ctx.font = "14px Arial";
+        for (const p of this.damagePopups) {
+            ctx.fillStyle = p.text === "WEAK HIT!" ? "#2ecc71" : "#ffffff";
+            ctx.fillText(p.text, p.x, p.y);
+        }
+    }
+
+    handleClick(x, y) {
+        this.click(x, y);
+    }
+}
+
+// ---------------- GAME ----------------
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const player = { money: 0 };
+const bossCore = new BossCoreMinigame(player);
+
+let lastTime = 0;
+
+window.addEventListener("keydown", (e) => {
+    if (e.key.toLowerCase() === "b") {
+        bossCore.start();
+    }
+});
+
+canvas.addEventListener("click", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    bossCore.handleClick(
+        e.clientX - rect.left,
+        e.clientY - rect.top
+    );
+});
+
+function loop(t) {
+    const dt = t - lastTime;
+    lastTime = t;
+
+    ctx.clearRect(0, 0, 800, 600);
+
+    bossCore.update(dt);
+    bossCore.render(ctx);
+
+    if (!bossCore.active) {
+        ctx.fillStyle = "white";
+        ctx.font = "20px Arial";
+        ctx.fillText("Press B to start Boss Core", 260, 280);
+        ctx.fillText("Money: $" + player.money, 330, 320);
+    }
+
+    requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
