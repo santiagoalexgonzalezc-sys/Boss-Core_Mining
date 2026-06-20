@@ -7,7 +7,7 @@
 <style>
     body {
         margin: 0;
-        background: radial-gradient(circle at center, #1a1a1a, #000);
+        background: radial-gradient(circle, #1a1a1a, #000);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -20,7 +20,7 @@
     canvas {
         border: 2px solid #333;
         background: #000;
-        box-shadow: 0 0 30px rgba(255,255,255,0.1);
+        box-shadow: 0 0 25px rgba(255,255,255,0.1);
     }
 
     button {
@@ -36,12 +36,12 @@
     }
 
     button:hover {
-        transform: scale(1.05);
+        transform: scale(1.08);
         background: linear-gradient(145deg, #3a3a3a, #222);
     }
 
     button:active {
-        transform: scale(0.95);
+        transform: scale(0.92);
     }
 
     #shopBtn { top: 20px; left: 20px; }
@@ -93,6 +93,14 @@ class BossCoreMinigame {
         ];
 
         this.spawnWeakPoints();
+    }
+
+    resetToMenu() {
+        this.active = false;
+        this.currentLayer = 0;
+        this.time = 0;
+        this.weakPoints = [];
+        this.damagePopups = [];
     }
 
     spawnWeakPoints() {
@@ -165,7 +173,7 @@ class BossCoreMinigame {
             x,
             y,
             text: "-" + Math.floor(damage),
-            life: 700
+            life: 600
         });
 
         if (hitWeak) {
@@ -173,7 +181,7 @@ class BossCoreMinigame {
                 x,
                 y: y - 20,
                 text: "CRITICAL!",
-                life: 600
+                life: 500
             });
         }
 
@@ -198,27 +206,31 @@ class BossCoreMinigame {
 
         this.player.money += reward;
 
+        this.resetToMenu();
+        state = "menu";
+
         alert("💥 CORE DESTROYED! +$" + reward);
     }
 
     fail() {
         this.active = false;
+        this.resetToMenu();
+        state = "menu";
         alert("⚠️ Core regenerated...");
     }
 
     render(ctx) {
         if (!this.active) return;
 
-        // 🌑 background glow
         ctx.fillStyle = "#050505";
         ctx.fillRect(0, 0, 800, 600);
 
         const layer = this.layers[this.currentLayer];
         const radius = 90 - this.currentLayer * 12;
 
-        // 🔴 core glow
+        // core glow
         ctx.shadowColor = "#ff3b3b";
-        ctx.shadowBlur = 25;
+        ctx.shadowBlur = 20;
 
         ctx.fillStyle = "#e74c3c";
         ctx.beginPath();
@@ -227,21 +239,20 @@ class BossCoreMinigame {
 
         ctx.shadowBlur = 0;
 
-        // 🟢 weak points (animated pulse)
+        // weak points
         for (const wp of this.weakPoints) {
             if (!wp.active) continue;
 
-            wp.pulse += 0.1;
-
-            const pulseSize = wp.radius + Math.sin(wp.pulse) * 2;
+            wp.pulse += 0.08;
+            const pulse = wp.radius + Math.sin(wp.pulse) * 2;
 
             ctx.fillStyle = "#2ecc71";
             ctx.beginPath();
-            ctx.arc(wp.x, wp.y, pulseSize, 0, Math.PI * 2);
+            ctx.arc(wp.x, wp.y, pulse, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // 📊 HP BAR
+        // HP bar
         const barW = 300;
         const hpPct = layer.hp / layer.maxHp;
 
@@ -254,17 +265,15 @@ class BossCoreMinigame {
         ctx.strokeStyle = "#fff";
         ctx.strokeRect(this.coreX - barW/2, this.coreY - radius - 45, barW, 18);
 
-        // 🧠 UI
+        // UI
         ctx.fillStyle = "white";
         ctx.font = "16px Arial";
         ctx.fillText("Layer: " + layer.name, 20, 30);
         ctx.fillText("HP: " + Math.floor(layer.hp), 20, 60);
-        ctx.fillText("Money: $" + this.player.money, 20, 90);
 
-        // 💥 damage popups
+        // damage numbers
         for (const p of this.damagePopups) {
             ctx.fillStyle = p.text === "CRITICAL!" ? "#2ecc71" : "#fff";
-            ctx.font = "14px Arial";
             ctx.fillText(p.text, p.x, p.y);
         }
     }
@@ -274,10 +283,12 @@ class BossCoreMinigame {
     }
 }
 
-// ---------------- GAME STATE ----------------
+// ---------------- GAME ----------------
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+
+let state = "menu";
 
 const player = {
     money: 0,
@@ -289,18 +300,17 @@ const player = {
 
 const bossCore = new BossCoreMinigame(player);
 
-let state = "menu";
+// ---------------- BUTTONS ----------------
 
-// ---------------- SHOP UI ----------------
-
-const shopUI = {
-    hover: null,
-    clickAnim: 0
+document.getElementById("shopBtn").onclick = () => {
+    if (!bossCore.active) {
+        state = "shop";
+    }
 };
 
-// buttons
-document.getElementById("shopBtn").onclick = () => state = "shop";
-document.getElementById("fsBtn").onclick = () => document.documentElement.requestFullscreen();
+document.getElementById("fsBtn").onclick = () => {
+    document.documentElement.requestFullscreen();
+};
 
 // ---------------- INPUT ----------------
 
@@ -326,13 +336,11 @@ canvas.addEventListener("click", (e) => {
 
     if (state === "shop") {
         if (x > 200 && x < 600) {
-            // normal dmg upgrade
             if (y > 220 && y < 290 && player.money >= 100) {
                 player.money -= 100;
                 player.upgrades.normalDmg += 2;
             }
 
-            // weak dmg upgrade
             if (y > 330 && y < 400 && player.money >= 150) {
                 player.money -= 150;
                 player.upgrades.weakDmg += 5;
@@ -343,17 +351,8 @@ canvas.addEventListener("click", (e) => {
 
 // ---------------- LOOP ----------------
 
-function loop(t) {
+function loop() {
     ctx.clearRect(0, 0, 800, 600);
-
-    if (state === "game") {
-        bossCore.update(16);
-        bossCore.render(ctx);
-
-        ctx.fillStyle = "white";
-        ctx.font = "14px Arial";
-        ctx.fillText("🏪 Shop button available", 600, 30);
-    }
 
     if (state === "menu") {
         ctx.fillStyle = "white";
@@ -362,29 +361,38 @@ function loop(t) {
         ctx.font = "18px Arial";
         ctx.fillText("Press B to Start", 300, 260);
         ctx.fillText("Money: $" + player.money, 320, 320);
-        ctx.fillText("Use Shop button to upgrade", 270, 360);
+    }
+
+    if (state === "game") {
+        bossCore.update(16);
+        bossCore.render(ctx);
+
+        ctx.fillStyle = "#aaa";
+        ctx.font = "14px Arial";
+        ctx.fillText("Shop disabled during battle", 520, 30);
     }
 
     if (state === "shop") {
-        // background
         ctx.fillStyle = "#0b0b0b";
         ctx.fillRect(0, 0, 800, 600);
 
-        ctx.fillStyle = "#fff";
+        ctx.fillStyle = "white";
         ctx.font = "28px Arial";
         ctx.fillText("🏪 SHOP", 350, 80);
 
         ctx.font = "18px Arial";
         ctx.fillText("Money: $" + player.money, 330, 120);
 
-        // cards
-        drawCard(200, 200, "⚔️ Normal Damage", "+2 Damage", "$100");
-        drawCard(200, 300, "💥 Weak Point Damage", "+5 Damage", "$150");
+        ctx.fillText("Normal DMG: " + player.upgrades.normalDmg, 260, 180);
+        ctx.fillText("Weak DMG: " + player.upgrades.weakDmg, 260, 200);
+
+        drawCard(200, 220, "⚔️ Upgrade Normal Damage", "+2 DMG", "$100");
+        drawCard(200, 330, "💥 Upgrade Weak Damage", "+5 DMG", "$150");
 
         ctx.fillStyle = "#777";
         ctx.font = "14px Arial";
         ctx.fillText("Click cards to upgrade", 310, 450);
-        ctx.fillText("ESC to go back", 330, 480);
+        ctx.fillText("ESC to exit shop", 330, 480);
     }
 
     requestAnimationFrame(loop);
